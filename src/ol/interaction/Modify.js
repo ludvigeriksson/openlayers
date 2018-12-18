@@ -1013,7 +1013,8 @@ class Modify extends PointerInteraction {
    * @api
    */
   removePoint() {
-    if (this.lastPointerEvent_ && this.lastPointerEvent_.type != MapBrowserEventType.POINTERDRAG) {
+    if (this.lastPointerEvent_ && this.lastPointerEvent_.type != MapBrowserEventType.POINTERDRAG &&
+    this.removeVertex_(true)) {
       const evt = this.lastPointerEvent_;
       this.willModifyFeatures_(evt);
       const removed = this.removeVertex_();
@@ -1025,11 +1026,22 @@ class Modify extends PointerInteraction {
   }
 
   /**
+   * Checks whether the vertex currently being pointed can be removed.
+   * @return {boolean} True if the vertex can be removed.
+   * @api
+   */
+  canRemovePoint() {
+    return this.removeVertex_(true);
+  }
+
+  /**
    * Removes a vertex from all matching features.
-   * @return {boolean} True when a vertex was removed.
+   * @param {boolean} [onlyCheck=false] If true, a vertex will not be removed,
+   * but the function will return whether a vertex can be removed.
+   * @return {boolean} True when a vertex was removed or can be removed.
    * @private
    */
-  removeVertex_() {
+  removeVertex_(onlyCheck = false) {
     const dragSegments = this.dragSegments_;
     const segmentsByFeature = {};
     let deleted = false;
@@ -1075,13 +1087,17 @@ class Modify extends PointerInteraction {
       switch (geometry.getType()) {
         case GeometryType.MULTI_LINE_STRING:
           if (coordinates[segmentData.depth[0]].length > 2) {
-            coordinates[segmentData.depth[0]].splice(index, 1);
+            if (!onlyCheck) {
+              coordinates[segmentData.depth[0]].splice(index, 1);
+            }
             deleted = true;
           }
           break;
         case GeometryType.LINE_STRING:
           if (coordinates.length > 2) {
-            coordinates.splice(index, 1);
+            if (!onlyCheck) {
+              coordinates.splice(index, 1);
+            }
             deleted = true;
           }
           break;
@@ -1091,24 +1107,26 @@ class Modify extends PointerInteraction {
         case GeometryType.POLYGON:
           component = component[segmentData.depth[0]];
           if (component.length > 4) {
-            if (index == component.length - 1) {
-              index = 0;
+            if (!onlyCheck) {
+              if (index == component.length - 1) {
+                index = 0;
+              }
+              component.splice(index, 1);
+              if (index === 0) {
+                // close the ring again
+                component.pop();
+                component.push(component[0]);
+                newIndex = component.length - 1;
+              }
             }
-            component.splice(index, 1);
             deleted = true;
-            if (index === 0) {
-              // close the ring again
-              component.pop();
-              component.push(component[0]);
-              newIndex = component.length - 1;
-            }
           }
           break;
         default:
           // pass
       }
 
-      if (deleted) {
+      if (deleted && !onlyCheck) {
         this.setGeometryCoordinates_(geometry, coordinates);
         const segments = [];
         if (left !== undefined) {
